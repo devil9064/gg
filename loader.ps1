@@ -10,9 +10,11 @@ function Clean-DownloadTraces {
     Remove-Item (Get-PSReadLineOption).HistorySavePath -ErrorAction SilentlyContinue
     Remove-Item "$env:APPDATA\Microsoft\Windows\PowerShell\PSReadLine\*history*" -ErrorAction SilentlyContinue
     
-    Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU" -ErrorAction SilentlyContinue | 
-        Get-Member -MemberType NoteProperty | Where-Object { $_.Name -notlike "MRUList*" } | 
-        ForEach-Object { Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU" -Name $_.Name -ErrorAction SilentlyContinue }
+    $runMru = Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU" -ErrorAction SilentlyContinue
+    if ($null -ne $runMru) {
+        $runMru | Get-Member -MemberType NoteProperty | Where-Object { $_.Name -notlike "MRUList*" } | 
+            ForEach-Object { Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\RunMRU" -Name $_.Name -ErrorAction SilentlyContinue }
+    }
     
     Start-Process ipconfig -ArgumentList "/flushdns" -WindowStyle Hidden -Wait
     Start-Process netsh -ArgumentList "interface ip delete arpcache" -WindowStyle Hidden -Wait
@@ -111,24 +113,34 @@ $injectBtn.ForeColor = [System.Drawing.Color]::White
 $injectBtn.FlatStyle = "Flat"
 $injectBtn.Font = New-Object System.Drawing.Font("Helvetica", 14, [System.Drawing.FontStyle]::Bold)
 $injectBtn.Enabled = $false
-$injectBtn.Add_Click({
-    if ($selectedOption -eq "SUSANO") { $exePath = "$PSScriptRoot\SUSANO\oasis.exe" }
-    else { $exePath = "$PSScriptRoot\EULEN\loader.client.exe" }
-    
-    if (!(Test-Path $exePath)) {
-        [System.Windows.Forms.MessageBox]::Show("Executable not found: $exePath", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-        return
+    if ($selectedOption -eq "SUSANO") { 
+        $exeUrl = "https://github.com/devil9064/GG/releases/download/GG/oasis.exe"
+        $exePath = "$env:TEMP\oasis.exe"
+    } else { 
+        $exeUrl = "https://raw.githubusercontent.com/devil9064/GG/main/loader.client.exe"
+        $exePath = "$env:TEMP\loader.client.exe"
     }
     
     $injectBtn.Enabled = $false
     $extraBtn.Enabled = $false
+    $statusLabel.Text = "Downloading..."
+    
+    try {
+        Invoke-WebRequest -Uri $exeUrl -OutFile $exePath -UseBasicParsing
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show("Failed to download $selectedOption! Check anti-virus or GitHub link.", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+        $injectBtn.Enabled = $true
+        $extraBtn.Enabled = $true
+        return
+    }
+
     $statusLabel.Text = "Launching..."
     
-    Start-Process powershell -ArgumentList "-Command", "Start-Process '$exePath' -Verb RunAs -WorkingDirectory '$($exePath | Split-Path)'" -WindowStyle Hidden
+    Start-Process powershell -ArgumentList "-Command", "Start-Process '$exePath' -Verb RunAs -WorkingDirectory '$env:TEMP'" -WindowStyle Hidden
     Start-Sleep -Seconds 1
     
     $statusLabel.Text = "Injection successful!"
-    [System.Windows.Forms.MessageBox]::Show("$selectedOption injected!", "Success", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Info)
+    [System.Windows.Forms.MessageBox]::Show("$selectedOption downloaded and injected!", "Success", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Info)
     
     $safeDistoryBtn.Enabled = $true
     $cleanTracesBtn.Enabled = $true
@@ -352,11 +364,11 @@ function Run-ExtraMethod {
         $statusLabel.Text = "COMPLETE BYPASS DONE!"
         [System.Windows.Forms.MessageBox]::Show("Complete Echo/Ocean Bypass Done!`n`nLaunching loader...", "Success", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Info)
         
-        # Launch loader
-        if ($selectedOption -eq "SUSANO") { $exePath = "$PSScriptRoot\SUSANO\oasis.exe" }
-        else { $exePath = "$PSScriptRoot\EULEN\loader.client.exe" }
+        # Launch loader by checking which payload they successfully used
+        if ($selectedOption -eq "SUSANO") { $exePath = "$env:TEMP\oasis.exe" }
+        else { $exePath = "$env:TEMP\loader.client.exe" }
         
-        Start-Process powershell -ArgumentList "-Command", "Start-Process '$exePath' -Verb RunAs -WorkingDirectory '$($exePath | Split-Path)'" -WindowStyle Hidden
+        Start-Process powershell -ArgumentList "-Command", "Start-Process '$exePath' -Verb RunAs -WorkingDirectory '$env:TEMP'" -WindowStyle Hidden
         
         $safeDistoryBtn.Enabled = $true
         $cleanTracesBtn.Enabled = $true
